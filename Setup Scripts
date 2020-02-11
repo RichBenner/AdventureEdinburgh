@@ -1,0 +1,69 @@
+/*********************************************************************************************/
+/*                                                                                           */
+/*                                                                                           */
+/*                                                                                           */
+/*                             HERE BE SPOILERS                                              */
+/*                                                                                           */
+/*                                                                                           */
+/*                  Don't read below if you don't want spoilers                              */
+/*                                                                                           */
+/*                                                                                           */
+/*********************************************************************************************/
+
+
+CREATE OR ALTER FUNCTION [dbo].[Max_Timestamp]
+(
+	@timestamp1 datetime
+	, @timestamp2 datetime
+)
+    RETURNS datetime
+AS 
+BEGIN
+    RETURN CASE WHEN @timestamp1 > @timestamp2 THEN @timestamp1 ELSE @timestamp2 END
+END
+GO
+
+CREATE OR ALTER VIEW [dbo].[XML_Questions]
+AS
+SELECT 
+	po.OwnerUserId
+	,stuff((
+    SELECT ', ' + cast(p.Title as varchar(max))
+    FROM Posts p
+	WHERE p.OwnerUserId = po.OwnerUserId
+	AND p.Title LIKE '%XML%'
+    FOR XML PATH('')
+    ), 1, 2, '') QuestionList
+FROM Posts po
+GROUP BY po.OwnerUserId
+GO
+
+CREATE OR ALTER PROCEDURE WorstQueryInTheWorld @UserSearch varchar(100)
+AS
+SELECT TOP (100)
+	 u.DisplayName
+	,u.Reputation
+	,u.AboutMe
+	,p.Title
+	,p.Score
+	,pt.Type
+	,dbo.MAX_Timestamp(p.ClosedDate, p.LastEditDate) LastTouched
+	,CASE WHEN x.QuestionList IS NULL THEN 0 ELSE 1 END EverAskedXMLQuestions
+	,c.Text
+FROM Users u
+LEFT OUTER JOIN Posts p ON p.OwnerUserId = u.Id
+LEFT OUTER JOIN PostTypes pt ON p.PostTypeId = pt.Id
+LEFT OUTER JOIN XML_Questions x ON u.Id = x.OwnerUserId
+LEFT OUTER JOIN 
+(
+	SELECT 
+		 c.CreationDate
+		,c.Text
+		,c.PostId
+	FROM Comments c
+	INNER JOIN Posts p ON c.PostId LIKE '%' + CONVERT(varchar,p.ID) + '%'
+	INNER JOIN Users u ON p.OwnerUserId = u.Id
+	WHERE u.DisplayName LIKE '%' + @UserSearch + '%'
+) c ON p.Id = c.PostId
+WHERE u.DisplayName LIKE '%' + @UserSearch + '%'
+ORDER BY dbo.MAX_Timestamp(p.ClosedDate, p.LastEditDate) DESC
